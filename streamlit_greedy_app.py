@@ -5,21 +5,16 @@ import altair as alt
 
 ALL_SYMBOLS = ["🥕", "🍅", "🌽", "🥬", "🌭", "🥩", "🍢"]
 SPIRAL_SYMBOLS = {"🌭", "🥩", "🍢"}
-history = st.session_state.get("history", deque(maxlen=30))
+history = st.session_state.get("history", deque(maxlen=50))
 
-# Dataset pola spiral + loop
-data = pd.DataFrame([
-    ("🥕", False, "Salad Ringan"),
-    ("🌭", True, "Spiral Trigger"),
-    ("🥩", True, "Spiral Aktif"),
-    ("🍢", True, "Spiral Lanjut"),
-    ("🍅", True, "Spiral Melambat"),
-    ("🥬", False, "Salad Berat"),
-    ("🌽", False, "Salad Netral"),
-], columns=["Simbol", "Spiral", "Loop"])
+@st.cache_data
+def load_dataset():
+    return pd.read_csv("dataset_spiral.csv")
+
+data = load_dataset()
 
 st.set_page_config(page_title="Prediksi Spiral Greedy", layout="centered")
-st.title("🔮 Prediksi Spiral Greedy (Akurasi Bertingkat)")
+st.title("🔮 Prediksi Spiral Greedy (Selalu 2 Pilihan)")
 
 st.markdown("Klik simbol sesuai hasil terakhir dari permainan:")
 cols = st.columns(len(ALL_SYMBOLS))
@@ -28,29 +23,26 @@ for i, s in enumerate(ALL_SYMBOLS):
         history.append(s)
         st.session_state["history"] = history
 
-def predict_next(hist):
+def predict_top_two(hist):
+    freq = Counter()
     if len(hist) >= 2:
         last2 = tuple(hist)[-2:]
-        pairs = list(zip(data["Simbol"].shift(1), data["Simbol"]))
-        match = [curr for prev, curr in pairs if prev == last2[0] and curr == last2[1]]
-        if match:
-            pred, count = Counter(match).most_common(1)[0]
-            conf = round(count / len(match) * 100, 2)
-            loop = data[data["Simbol"] == pred].iloc[-1]["Loop"]
-            return pred, conf, loop, "🟢 Akurasi Tinggi (2 simbol cocok)"
-    if len(hist) >= 1:
+        match = data[(data["prev_symbol"] == last2[0]) & (data["next_symbol"] == last2[1])]
+        freq.update(data[data["prev_symbol"] == last2[1]]["next_symbol"])
+    elif len(hist) >= 1:
         last = hist[-1]
-        match = data[data["Simbol"].shift(1) == last]["Simbol"]
-        if not match.empty:
-            pred = match.mode().iloc[0]
-            conf = 70.0
-            loop = data[data["Simbol"] == pred].iloc[-1]["Loop"]
-            return pred, conf, loop, "🟡 Akurasi Sedang (1 simbol cocok)"
-    # Fallback
-    pred = data["Simbol"].value_counts().idxmax()
-    conf = 50.0
-    loop = data[data["Simbol"] == pred].iloc[-1]["Loop"]
-    return pred, conf, loop, "🔴 Akurasi Lemah (statistik umum)"
+        freq.update(data[data["prev_symbol"] == last]["next_symbol"])
+
+    if not freq:
+        freq.update(data["next_symbol"])
+
+    top2 = freq.most_common(2)
+    results = []
+    for symb, count in top2:
+        total = sum(freq.values())
+        conf = round(count / total * 100, 2)
+        results.append((symb, conf))
+    return results
 
 def detect_spiral(hist):
     spiral_count = sum(1 for s in hist if s in SPIRAL_SYMBOLS)
@@ -64,15 +56,17 @@ if history:
     st.subheader("📊 Histori Simbol")
     st.write(" → ".join(history))
 
-    pred, conf, loop, akurasi_level = predict_next(history)
     spiral_status = detect_spiral(history)
+    results = predict_top_two(history)
 
-    st.subheader("🔮 Prediksi Berikutnya")
-    if pred:
-        st.success(f"Prediksi: {pred} | Akurasi: {conf}% | {akurasi_level}")
-        st.info(f"📡 Status Spiral: {spiral_status} | Loop: {loop}")
-    else:
-        st.warning("Belum cukup data untuk prediksi.")
+    st.subheader("🔮 2 Prediksi Terbaik Berdasarkan Dataset")
+    for i, (symb, conf) in enumerate(results, 1):
+        st.success(f"{i}️⃣ {symb} | Confidence: {conf}%")
+
+    if len(results) < 2:
+        st.warning("Hanya 1 prediksi tersedia untuk kombinasi ini. Sistem fallback otomatis.")
+
+    st.info(f"📡 Spiral Status: {spiral_status}")
 
     st.subheader("📈 Grafik Simbol")
     df_hist = pd.DataFrame(Counter(history).items(), columns=["Simbol", "Frekuensi"])
@@ -81,4 +75,4 @@ if history:
     )
     st.altair_chart(chart, use_container_width=True)
 
-st.caption("🧠 Sistem by Baraka + GPT — spiral prediksi versi akurasi bertingkat")
+st.caption("🧠 Sistem by Baraka + GPT — 2 pilihan spiral terbaik, selalu tampil")
