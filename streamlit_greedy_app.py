@@ -41,13 +41,25 @@ def predict_next(hist):
     loop_info = data[data["Simbol"] == pred].iloc[-1]["Loop"]
     return pred, conf, loop_info
 
+def detect_spiral(hist):
+    spiral_count = sum(1 for s in hist if s in SPIRAL_SYMBOLS)
+    if spiral_count >= 4:
+        return "🟢 Spiral Aktif"
+    elif spiral_count == 2 or spiral_count == 3:
+        return "🟡 Spiral Melemah"
+    return "🔴 Spiral Off"
+
 if history:
     st.subheader("📊 Histori Simbol")
     st.write(" ".join(history))
+
     pred, conf, loop = predict_next(history)
+    spiral_status = detect_spiral(history)
+
     if pred:
         st.subheader("🔮 Prediksi Berikutnya")
-        st.success(f"{pred}  |  Akurasi: {conf}%  |  Status: {loop}")
+        st.success(f"Prediksi: {pred}  |  Akurasi: {conf}%  |  Status Loop: {loop}")
+        st.info(f"📡 Status Spiral: {spiral_status}")
 
 if history:
     st.subheader("📈 Grafik Simbol")
@@ -57,4 +69,4 @@ if history:
     )
     st.altair_chart(chart, use_container_width=True)
 
-st.caption("🧠 Sistem by Baraka + GPT — versi awal spiral reader")
+st.caption("🧠 Sistem by Baraka + GPT — versi spiral prediction real-time")
